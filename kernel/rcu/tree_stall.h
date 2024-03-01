@@ -549,6 +549,8 @@ static void rcu_check_gp_kthread_expired_fqs_timer(void)
 	}
 }
 
+extern void dump_npcm_irq(void);
+
 static void print_other_cpu_stall(unsigned long gp_seq, unsigned long gps)
 {
 	int cpu;
@@ -609,6 +611,9 @@ static void print_other_cpu_stall(unsigned long gp_seq, unsigned long gps)
 			       data_race(READ_ONCE(rcu_get_root()->qsmask)));
 		}
 	}
+
+	dump_npcm_irq();
+
 	/* Rewrite if needed in case of slow consoles. */
 	if (ULONG_CMP_GE(jiffies, READ_ONCE(rcu_state.jiffies_stall)))
 		WRITE_ONCE(rcu_state.jiffies_stall,
@@ -657,6 +662,8 @@ static void print_cpu_stall(unsigned long gps)
 	rcu_check_gp_kthread_starvation();
 
 	rcu_dump_cpu_stacks();
+
+	dump_npcm_irq();
 
 	raw_spin_lock_irqsave_rcu_node(rnp, flags);
 	/* Rewrite if needed in case of slow consoles. */

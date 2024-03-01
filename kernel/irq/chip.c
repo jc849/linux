@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/irqdomain.h>
+#include <linux/nmi.h>
 
 #include <trace/events/irq.h>
 
@@ -898,6 +899,9 @@ void handle_percpu_irq(struct irq_desc *desc)
 		chip->irq_eoi(&desc->irq_data);
 }
 
+irq_handler_t enter_irq[4] = {0};
+EXPORT_SYMBOL(enter_irq);
+
 /**
  * handle_percpu_devid_irq - Per CPU local irq handler with per cpu dev ids
  * @desc:	the interrupt description structure for this irq
@@ -927,7 +931,9 @@ void handle_percpu_devid_irq(struct irq_desc *desc)
 
 	if (likely(action)) {
 		trace_irq_handler_entry(irq, action);
+		enter_irq[smp_processor_id()] = action->handler;
 		res = action->handler(irq, raw_cpu_ptr(action->percpu_dev_id));
+		enter_irq[smp_processor_id()] = NULL;
 		trace_irq_handler_exit(irq, action, res);
 	} else {
 		unsigned int cpu = smp_processor_id();
@@ -1605,3 +1611,39 @@ int irq_chip_pm_put(struct irq_data *data)
 
 	return (retval < 0) ? retval : 0;
 }
+
+void dump_npcm_irq(void)
+{
+	int index = 0;
+	struct irq_desc *desc;
+	struct irqaction *action;
+
+	for (index = 0; index < nr_irqs; index++)
+	{
+		desc = irq_to_desc(index);
+		if (!desc) {
+			continue;
+		}
+
+		printk(KERN_CONT "%d: ", index);
+		printk(KERN_CONT "%10u %10u %10u %10u", kstat_irqs_cpu(index, 0), kstat_irqs_cpu(index, 1),
+			kstat_irqs_cpu(index, 2), kstat_irqs_cpu(index, 3));
+
+		action = desc->action;
+		if (action) {
+			printk(KERN_CONT "  %s", action->name);
+			while ((action = action->next) != NULL)
+				printk(KERN_CONT ", %s", action->name);
+		}
+		printk("\n");
+	}
+
+	printk("*******cpu interrupt running********\n");
+	for (index = 0; index < 4; index++) {
+		printk("CPU = %d IRQ = %pS\n", index, enter_irq[index]);
+	}
+
+	printk("trigger ipi cpu backtrace!\n");
+	trigger_all_cpu_backtrace();
+}
+EXPORT_SYMBOL(dump_npcm_irq);
