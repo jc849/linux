@@ -31,6 +31,7 @@
 #include <linux/uaccess.h>
 #include <linux/pm_runtime.h>
 #include <linux/ktime.h>
+#include <linux/timekeeping.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -1912,6 +1913,19 @@ static bool handle_rx_dma(struct uart_8250_port *up, unsigned int iir)
 /*
  * This handles the interrupt from one port.
  */
+
+int uart_port_index[10] = {0};
+
+ktime_t uart_port_rx_start[10][20] = {0};
+ktime_t uart_port_rx_end[10][20]  = {0};
+ktime_t uart_port_tx_start[10][20] = {0};
+ktime_t uart_port_tx_end[10][20] = {0};
+
+EXPORT_SYMBOL(uart_port_rx_start);
+EXPORT_SYMBOL(uart_port_rx_end);
+EXPORT_SYMBOL(uart_port_tx_start);
+EXPORT_SYMBOL(uart_port_tx_end);
+
 int serial8250_handle_irq(struct uart_port *port, unsigned int iir)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
@@ -1923,6 +1937,8 @@ int serial8250_handle_irq(struct uart_port *port, unsigned int iir)
 		return 0;
 
 	spin_lock_irqsave(&port->lock, flags);
+
+	uart_port_rx_start[port->line][uart_port_index[port->line]] = ktime_get();
 
 	status = serial_lsr_in(up);
 
@@ -1943,13 +1959,26 @@ int serial8250_handle_irq(struct uart_port *port, unsigned int iir)
 		if (!up->dma || handle_rx_dma(up, iir))
 			status = serial8250_rx_chars(up, status);
 	}
+
+	uart_port_rx_end[port->line][uart_port_index[port->line]] = ktime_get();
+
 	serial8250_modem_status(up);
+
+	uart_port_tx_start[port->line][uart_port_index[port->line]] = ktime_get();
+
 	if ((status & UART_LSR_THRE) && (up->ier & UART_IER_THRI)) {
 		if (!up->dma || up->dma->tx_err)
 			serial8250_tx_chars(up);
 		else if (!up->dma->tx_running)
 			__stop_tx(up);
 	}
+
+	uart_port_tx_end[port->line][uart_port_index[port->line]] = ktime_get();
+
+	uart_port_index[port->line]++;
+
+	if (uart_port_index[port->line] >= 20)
+		uart_port_index[port->line] = 0;
 
 	uart_unlock_and_check_sysrq_irqrestore(port, flags);
 

@@ -1612,9 +1612,17 @@ int irq_chip_pm_put(struct irq_data *data)
 	return (retval < 0) ? retval : 0;
 }
 
+extern int tick_do_timer_cpu;
+extern ktime_t start_irq[4][20];
+extern ktime_t end_irq[4][20];
+extern ktime_t uart_port_rx_start[10][20];
+extern ktime_t uart_port_rx_end[10][20];
+extern ktime_t uart_port_tx_start[10][20];
+extern ktime_t uart_port_tx_end[10][20];
+
 void dump_npcm_irq(void)
 {
-	int index = 0;
+	int index = 0, array_index = 0;
 	struct irq_desc *desc;
 	struct irqaction *action;
 
@@ -1636,6 +1644,30 @@ void dump_npcm_irq(void)
 				printk(KERN_CONT ", %s", action->name);
 		}
 		printk("\n");
+	}
+
+	printk("*******tick_do_timer_cpu = 0x%x*******\n", tick_do_timer_cpu);
+
+	printk("*******total uart handle times:*******\n");
+	for (index = 0; index < 4; index++)
+	{
+		for(array_index = 0; array_index < 20; array_index++)
+		{
+			printk("cpu=0x%x index=0x%x start=0x%llx end=0x%llx\n", index, array_index,
+				start_irq[index][array_index], end_irq[index][array_index]);
+		}
+	}
+
+	printk("*******uart port handle times:*******\n");
+
+	for (index = 0; index < 10; index++)
+	{
+		for (array_index = 0; array_index < 20; array_index++)
+		{
+			printk("port=0x%x rx_start=0x%llx rx_end=0x%llx tx_start=0x%llx tx_end=0x%llx\n", index,
+				uart_port_rx_start[index][array_index], uart_port_rx_end[index][array_index],
+				uart_port_tx_start[index][array_index], uart_port_tx_end[index][array_index]);
+		}
 	}
 
 	printk("*******cpu interrupt running********\n");

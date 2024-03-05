@@ -42,6 +42,8 @@
 
 #include "8250.h"
 
+#include <linux/timekeeping.h>
+
 /*
  * Configuration:
  *   share_irqs - whether we pass IRQF_SHARED to request_irq().  This option
@@ -105,6 +107,15 @@ static DEFINE_MUTEX(hash_mutex);	/* Used to walk the hash */
  * This means we need to loop through all ports. checking that they
  * don't have an interrupt pending.
  */
+
+int cpu_core_index[4] = {0};
+
+ktime_t start_irq[4][20] = {0};
+ktime_t end_irq[4][20] = {0};
+
+EXPORT_SYMBOL(start_irq);
+EXPORT_SYMBOL(end_irq);
+
 static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 {
 	struct irq_info *i = dev_id;
@@ -112,6 +123,8 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 	int pass_counter = 0, handled = 0;
 
 	pr_debug("%s(%d): start\n", __func__, irq);
+
+	start_irq[smp_processor_id()][cpu_core_index[smp_processor_id()]] = ktime_get();
 
 	spin_lock(&i->lock);
 
@@ -138,6 +151,13 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 	spin_unlock(&i->lock);
 
 	pr_debug("%s(%d): end\n", __func__, irq);
+
+	end_irq[smp_processor_id()][cpu_core_index[smp_processor_id()]] = ktime_get();
+
+	cpu_core_index[smp_processor_id()]++;
+
+	if (cpu_core_index[smp_processor_id()] == 20)
+		cpu_core_index[smp_processor_id()] = 0;
 
 	return IRQ_RETVAL(handled);
 }
