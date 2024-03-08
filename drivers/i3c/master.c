@@ -1719,16 +1719,24 @@ int i3c_master_do_daa(struct i3c_master_controller *master)
 {
 	int ret;
 
+	mutex_lock(&i3c_core_lock);
+
 	i3c_bus_maintenance_lock(&master->bus);
 	ret = master->ops->do_daa(master);
 	i3c_bus_maintenance_unlock(&master->bus);
 
+	mutex_unlock(&i3c_core_lock);
+
 	if (ret)
 		return ret;
+
+	mutex_lock(&i3c_core_lock);
 
 	i3c_bus_normaluse_lock(&master->bus);
 	i3c_master_register_new_i3c_devs(master);
 	i3c_bus_normaluse_unlock(&master->bus);
+
+	mutex_unlock(&i3c_core_lock);
 
 	return 0;
 }
@@ -1980,10 +1988,11 @@ static int i3c_master_bus_init(struct i3c_master_controller *master)
 	if (master->bus.jesd403) {
 		i3c_master_sethid_locked(master);
 		i3c_master_setaasa_locked(master);
-
+		mutex_lock(&i3c_core_lock);
 		i3c_bus_normaluse_lock(&master->bus);
 		i3c_master_register_new_i3c_devs(master);
 		i3c_bus_normaluse_unlock(&master->bus);
+		mutex_unlock(&i3c_core_lock);
 		return 0;
 	}
 
@@ -2475,6 +2484,8 @@ static int i3c_i2c_notifier_call(struct notifier_block *nb, unsigned long action
 
 	master = i2c_adapter_to_i3c_master(adap);
 
+	mutex_lock(&i3c_core_lock);
+
 	i3c_bus_maintenance_lock(&master->bus);
 	switch (action) {
 	case BUS_NOTIFY_ADD_DEVICE:
@@ -2485,6 +2496,8 @@ static int i3c_i2c_notifier_call(struct notifier_block *nb, unsigned long action
 		break;
 	}
 	i3c_bus_maintenance_unlock(&master->bus);
+
+	mutex_unlock(&i3c_core_lock);
 
 	return ret;
 }
